@@ -1,0 +1,38 @@
+from pathlib import Path
+from urllib import request
+import sys, json
+
+PAT = sys.argv[1]
+
+page = 1
+final_page = False
+projects = []
+while not final_page:
+    proj_req = request.Request(f"https://gitlab.fcbint.net/api/v4/projects?page={page}")
+    proj_req.add_header('PRIVATE-TOKEN', f'{PAT}')
+    resp = request.urlopen(proj_req)
+    projects += json.loads(resp.read())
+    final_page = int(resp.headers['X-Total-Pages']) == page
+    page += 1
+
+repos = {project['path']: {"id":project['id'], "path": project['path_with_namespace']} for project in projects}
+for k,v in repos.items():
+    page = 1
+    final_page = False
+    branches = []
+    while not final_page:
+        branch_req = request.Request(f"https://gitlab.fcbint.net/api/v4/projects/{v['id']}/repository/branches?page={page}")
+        branch_req.add_header('PRIVATE-TOKEN', f'{PAT}')
+        resp = request.urlopen(branch_req)
+        branches += json.loads(resp.read())
+        final_page = int(resp.headers['X-Total-Pages']) == page
+        page += 1
+    
+    for branch in branches:
+        Path(v['path']).mkdir(parents=True, exist_ok=True)
+        url = f"https://gitlab.fcbint.net/{v['path']}/-/archive/{branch['name']}/{k}-{branch['name']}.zip"
+        print(url)
+        zip_req= request.Request(url)
+        zip_req.add_header('PRIVATE-TOKEN', f'{PAT}')
+        zip_content = request.urlopen(zip_req).read()
+        open(f"{v['path']}/{k}-{branch['name']}.zip", 'wb').write(zip_content)
